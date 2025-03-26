@@ -262,7 +262,7 @@ public class ListItemNode: ElementNode {
     if let listNode {
       switch listNode.getListType() {
       case .bullet:
-        character = "\u{2022}"
+        character = "\u{25CF}"
 
       case .number:
         let start = listNode.getStart()

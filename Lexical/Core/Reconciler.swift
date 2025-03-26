@@ -166,12 +166,19 @@ internal enum Reconciler {
       textStorage.decoratorPositionCache[key] = rangeCacheItem.location
     }
     decoratorsToDecorate.forEach { key in
-      if let cacheItem = editor.decoratorCache[key], let view = cacheItem.view {
-        editor.decoratorCache[key] = DecoratorCacheItem.needsDecorating(view)
+        if let cacheItem = editor.decoratorCache[key], let view = cacheItem.view {
+            editor.decoratorCache[key] = DecoratorCacheItem.needsDecorating(view)
+        }
+          //guard let rangeCacheItem = reconcilerState.nextRangeCache[key] else { return }
+          //textStorage.decoratorPositionCache[key] = rangeCacheItem.location
       }
-      guard let rangeCacheItem = reconcilerState.nextRangeCache[key] else { return }
-      textStorage.decoratorPositionCache[key] = rangeCacheItem.location
-    }
+
+      // Fix: Decorators positioning
+      for key in textStorage.decoratorPositionCache.keys {
+          if let rangeCacheItem = reconcilerState.nextRangeCache[key] {
+              textStorage.decoratorPositionCache[key] = rangeCacheItem.location
+          }
+      }
 
     editor.log(.reconciler, .verbose, "about to do rangesToAdd: total \(reconcilerState.rangesToAdd.count)")
 

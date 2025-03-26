@@ -38,16 +38,96 @@ open class ListPlugin: Plugin {
         return true
       })
 
-      try editor.registerCustomDrawing(customAttribute: .listItem, layer: .text, granularity: .contiguousParagraphs) {
+    _ = try editor.registerUpdateListener { [weak editor] activeEditorState, previousEditorState, dirtyNodes in
+        guard let editor else {
+            return
+        }
+
+        guard let selection = activeEditorState.selection as? RangeSelection else {
+            return
+        }
+
+        guard let firstNode = try? selection.getNodes().first else {
+            return
+        }
+
+        if let currentListItemNode = (firstNode is ListItemNode ? firstNode : firstNode.getParent()) as? ListItemNode {
+            if let listItemAbove = currentListItemNode.getPreviousSibling() as? ListItemNode {
+                let childrenAbove = listItemAbove.getChildren()
+                var shouldEndList = false
+                if let firstChildAbove = childrenAbove.first as? TextNode {
+                    let text = firstChildAbove.getTextPart()
+                    let pattern = "[\\u200B]+"
+                    let regex = try! NSRegularExpression(pattern: pattern)
+                    let range = NSRange(location: 0, length: text.utf16.count)
+                    if text.isEmpty || regex.firstMatch(in: text, options: [], range: range) != nil {
+                        shouldEndList = true
+                    }
+                } else if childrenAbove.isEmpty {
+                    shouldEndList = true
+                }
+
+                if shouldEndList {
+                    print("end")
+                    try! editor.update {
+                        try listItemAbove.replace(replaceWith: ParagraphNode())
+                        let paragraph = ParagraphNode()
+                        try paragraph.setIndent(0)
+                        //try paragraph.append([TextNode(text: "")])
+                        try currentListItemNode.replace(replaceWith: paragraph)
+
+                    }
+                    return
+                }
+            }
+        }
+
+        if let listItem = firstNode as? ListItemNode {
+            if selection.anchor.offset == 0, selection.focus.offset == 0 {
+                try! editor.update {
+                    try listItem.append([TextNode(text: "\u{200B}")])
+                }
+                return
+            }
+        }
+
+        guard selection.anchor.offset == 2, selection.focus.offset == 2 else {
+            return
+        }
+
+        guard let node = firstNode as? TextNode else {
+            return
+        }
+
+        let pattern = "[\\u200B]*[-*] [\\u200B]*"
+        let regex = try! NSRegularExpression(pattern: pattern)
+        let text = node.getTextPart()
+        let range = NSRange(location: 0, length: text.utf16.count)
+
+        guard let match = regex.firstMatch(in: text, options: [], range: range) else {
+            return
+        }
+
+        guard node.getPreviousSibling() == nil && node.getNextSibling() == nil else {
+            return
+        }
+
+        try! editor.update {
+            let list = createListNode(listType: .bullet)
+            let listItem = ListItemNode()
+            try list.append([listItem])
+
+            try node.getParent()?.replace(replaceWith: list)
+        }
+    }
+
+    try editor.registerCustomDrawing(customAttribute: .listItem, layer: .text, granularity: .singleParagraph) {
         attributeKey, attributeValue, layoutManager, characterRange, expandedCharRange, glyphRange, rect, firstLineFragment in
 
         guard let attributeValue = attributeValue as? ListItemAttribute, let textStorage = layoutManager.textStorage as? TextStorage else {
           return
         }
 
-        // we only want to do the drawing if we're the first character in a paragraph.
-        // We could optimise this in the future by either (1) hooking in to TextKit string normalisation, or (2) subclassing
-        // NSParagraphStyle
         if characterRange.location != 0 && (textStorage.string as NSString).substring(with: NSRange(location: characterRange.location - 1, length: 1)) != "\n" {
           return
         }
